@@ -16,7 +16,7 @@ on:
   #     - prereleased
 
 env:
-  ARTIFACTS_API_KEY: ${{ secrets.AZURE_ARTIFACTS_PERSONAL_ACCESS_TOKEN }} | base64 -w 0
+  ARTIFACTS_API_KEY: ${{ secrets.AZURE_ARTIFACTS_PERSONAL_ACCESS_TOKEN }} | base64
   # GITHUB_TOKEN: ${{ secrets.PAT_ATTACH_TO_RELEASE }}
 
 jobs:
