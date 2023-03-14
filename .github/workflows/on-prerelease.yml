@@ -35,7 +35,7 @@ jobs:
           # Create a .npmrc file with proper settings
           touch .npmrc
           echo registry=https://pkgs.dev.azure.com/ed-fi-alliance/Ed-Fi-Alliance-OSS/_packaging/EdFi/npm/registry/  >> .npmrc
-          echo ; begin auth token >> .npmrc
+          echo '; begin auth token' >> .npmrc
 
       - name: Setup Node
         uses: actions/setup-node@8c91899e586c5b171469028077307d293428b516 # v3.5.1
