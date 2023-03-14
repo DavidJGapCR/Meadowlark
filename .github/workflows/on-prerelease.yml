@@ -30,7 +30,7 @@ jobs:
         uses: actions/checkout@755da8c3cf115ac066823e79a1e1788f8940201b # v3.2.0
 
       - name: Create user .npmrc file for mongodb.
-        working-directory: $HOME
+        # working-directory: $HOME
         run: |
           # Create the user .npmrc file with proper settings
           touch .npmrc
@@ -58,7 +58,7 @@ jobs:
           key: ${{ runner.os }}-modules-${{ hashFiles('**/package-lock.json') }}
 
       - name: Install dependencies
-        working-directory: Meadowlark-js
+        working-directory: Meadowlark-js/backends/meadowlark-mongodb-backend
         if: ${{ steps.modules-cache.outputs.cache-hit != 'true' }}
         run: npm install
 
