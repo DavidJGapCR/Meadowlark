@@ -17,7 +17,7 @@ on:
 
 env:
   # GITHUB_TOKEN: ${{ secrets.PAT_ATTACH_TO_RELEASE }}
-  ARTIFACTS_API_KEY: ${{ secrets.AZURE_ARTIFACTS_PERSONAL_ACCESS_TOKEN }}
+  ARTIFACTS_API_KEY: "${{ secrets.AZURE_ARTIFACTS_PERSONAL_ACCESS_TOKEN }} | base64 -w 0"
 
 jobs:
   publish:
@@ -29,19 +29,18 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@755da8c3cf115ac066823e79a1e1788f8940201b # v3.2.0
 
-      - name: Create .npmrc file for mongodb.
-        working-directory: Meadowlark-js/backends/meadowlark-mongodb-backend
+      - name: Create user .npmrc file for mongodb.
+        working-directory: $HOME
         run: |
-          # Create a .npmrc file with proper settings
+          # Create the user .npmrc file with proper settings
           touch .npmrc
-          echo registry=https://pkgs.dev.azure.com/ed-fi-alliance/Ed-Fi-Alliance-OSS/_packaging/EdFi/npm/registry/  >> .npmrc
           echo "; begin auth token" >> .npmrc
           echo //pkgs.dev.azure.com/ed-fi-alliance/Ed-Fi-Alliance-OSS/_packaging/EdFi/npm/registry/:username=ed-fi-alliance >> .npmrc
           echo //pkgs.dev.azure.com/ed-fi-alliance/Ed-Fi-Alliance-OSS/_packaging/EdFi/npm/registry/:_password=${{ env.ARTIFACTS_API_KEY }} >> .npmrc
-          echo //pkgs.dev.azure.com/ed-fi-alliance/Ed-Fi-Alliance-OSS/_packaging/EdFi/npm/registry/:email=npm requires email to be set but doesn't use the value >> .npmrc
+          echo //pkgs.dev.azure.com/ed-fi-alliance/Ed-Fi-Alliance-OSS/_packaging/EdFi/npm/registry/:email=djimenez@growthaccelerationpartners.com >> .npmrc
           echo //pkgs.dev.azure.com/ed-fi-alliance/Ed-Fi-Alliance-OSS/_packaging/EdFi/npm/:username=ed-fi-alliance >> .npmrc
           echo //pkgs.dev.azure.com/ed-fi-alliance/Ed-Fi-Alliance-OSS/_packaging/EdFi/npm/:_password=${{ env.ARTIFACTS_API_KEY }} >> .npmrc
-          echo //pkgs.dev.azure.com/ed-fi-alliance/Ed-Fi-Alliance-OSS/_packaging/EdFi/npm/:email=npm requires email to be set but doesn't use the value >> .npmrc
+          echo //pkgs.dev.azure.com/ed-fi-alliance/Ed-Fi-Alliance-OSS/_packaging/EdFi/npm/:email=djimenez@growthaccelerationpartners.com >> .npmrc
           echo "; end auth token" >> .npmrc
 
       - name: Setup Node
@@ -69,11 +68,6 @@ jobs:
         with:
           path: "**/dist/**"
           key: ${{ runner.os }}-build-${{ hashFiles('**/dist/**') }}
-
-      # - name: Build Typescript
-      #   working-directory: Meadowlark-js
-      #   if: ${{ steps.build-cache.outputs.cache-hit != 'true' }}
-      #   run: npm run build
 
       - name: Publish
         working-directory: Meadowlark-js/backends/meadowlark-mongodb-backend
