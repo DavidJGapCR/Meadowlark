@@ -29,7 +29,7 @@ jobs:
       # - name: Checkout repository
       #   uses: actions/checkout@755da8c3cf115ac066823e79a1e1788f8940201b # v3.2.0
 
-      - namne: base64test
+      - name: base64test
         id: base64-test
         run: echo "${{env.ARTIFACTS_API_KEY_BASE64}}=${{ ARTIFACTS_API_KEY }} | base64 -w 0" >> $GITHUB_OUTPUT
 
