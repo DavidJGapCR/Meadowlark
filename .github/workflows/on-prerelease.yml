@@ -6,81 +6,87 @@
 name: On Pre-Release
 on:
   workflow_dispatch:
-    inputs:
-      name:
-        description: 'Name'
-        required: false
-        default: 'Name'
   # release:
   #   types:
   #     - prereleased
 
 env:
   ARTIFACTS_API_KEY: ${{ secrets.AZURE_ARTIFACTS_PERSONAL_ACCESS_TOKEN }}
+  # ARTIFACTS_API_KEY: ${{ secrets.AZURE_ARTIFACTS_PERSONAL_ACCESS_TOKEN }} | base64 # ToDo: For some reason the pipe is not returning the expected value.
   # GITHUB_TOKEN: ${{ secrets.PAT_ATTACH_TO_RELEASE }}
 
 jobs:
-  publish:
+  azure-publish:
     name: Publish Meadowlark mongodb
     runs-on: ubuntu-latest
     outputs:
       hash-code: ${{ steps.hash-code.outputs.hash-code }}
     steps:
-      # - name: Checkout repository
-      #   uses: actions/checkout@755da8c3cf115ac066823e79a1e1788f8940201b # v3.2.0
+      - name: Checkout repository
+        uses: actions/checkout@755da8c3cf115ac066823e79a1e1788f8940201b # v3.2.0
 
-      - name: base64test
-        id: base64-test
-        shell: bash
-        # run: echo ARTIFACTS_API_KEY_BASE64=${{ env.ARTIFACTS_API_KEY }} | base64 -w 0 >> $GITHUB_OUTPUT
-        run: echo "::set-output name=ARTIFACTS_API_KEY_BASE64::$(echo '${{ env.ARTIFACTS_API_KEY }}' | base64 -w 0)"
+      - name: Create user .npmrc file for mongodb.
+        run: |
+          # Create the user .npmrc file with proper settings
+          touch $HOME/.npmrc
+          echo "; begin auth token" >> .npmrc
+          echo //pkgs.dev.azure.com/ed-fi-alliance/Ed-Fi-Alliance-OSS/_packaging/EdFi/npm/registry/:username=ed-fi-alliance >> $HOME/.npmrc
+          echo //pkgs.dev.azure.com/ed-fi-alliance/Ed-Fi-Alliance-OSS/_packaging/EdFi/npm/registry/:_password=${{ env.ARTIFACTS_API_KEY }} >> $HOME/.npmrc
+          echo //pkgs.dev.azure.com/ed-fi-alliance/Ed-Fi-Alliance-OSS/_packaging/EdFi/npm/registry/:email=not-used@example.com >> $HOME/.npmrc
+          echo //pkgs.dev.azure.com/ed-fi-alliance/Ed-Fi-Alliance-OSS/_packaging/EdFi/npm/:username=ed-fi-alliance >> $HOME/.npmrc
+          echo //pkgs.dev.azure.com/ed-fi-alliance/Ed-Fi-Alliance-OSS/_packaging/EdFi/npm/:_password=${{ env.ARTIFACTS_API_KEY }} >> $HOME/.npmrc
+          echo //pkgs.dev.azure.com/ed-fi-alliance/Ed-Fi-Alliance-OSS/_packaging/EdFi/npm/:email=not-used@example.com >> $HOME/.npmrc
+          echo "; end auth token" >> $HOME/.npmrc
 
-      - name: Get color
-        run: echo "base 64 is ${{ steps.base64-test.outputs.ARTIFACTS_API_KEY_BASE64 }}"
+      - name: Setup Node
+        uses: actions/setup-node@8c91899e586c5b171469028077307d293428b516 # v3.5.1
+        with:
+          node-version: "16"
+          cache: "npm"
+          cache-dependency-path: "**/package-lock.json"
 
-      # - name: Create user .npmrc file for mongodb.
-      #   run: |
-      #     # Create the user .npmrc file with proper settings
-      #     touch $HOME/.npmrc
-      #     echo "; begin auth token" >> .npmrc
-      #     echo //pkgs.dev.azure.com/ed-fi-alliance/Ed-Fi-Alliance-OSS/_packaging/EdFi/npm/registry/:username=ed-fi-alliance >> $HOME/.npmrc
-      #     echo //pkgs.dev.azure.com/ed-fi-alliance/Ed-Fi-Alliance-OSS/_packaging/EdFi/npm/registry/:_password=${{ env.ARTIFACTS_API_KEY }} >> $HOME/.npmrc
-      #     echo //pkgs.dev.azure.com/ed-fi-alliance/Ed-Fi-Alliance-OSS/_packaging/EdFi/npm/registry/:email=not-used@example.com >> $HOME/.npmrc
-      #     echo //pkgs.dev.azure.com/ed-fi-alliance/Ed-Fi-Alliance-OSS/_packaging/EdFi/npm/:username=ed-fi-alliance >> $HOME/.npmrc
-      #     echo //pkgs.dev.azure.com/ed-fi-alliance/Ed-Fi-Alliance-OSS/_packaging/EdFi/npm/:_password=${{ env.ARTIFACTS_API_KEY }} >> $HOME/.npmrc
-      #     echo //pkgs.dev.azure.com/ed-fi-alliance/Ed-Fi-Alliance-OSS/_packaging/EdFi/npm/:email=not-used@example.com >> $HOME/.npmrc
-      #     echo "; end auth token" >> $HOME/.npmrc
+      - name: Node modules cache
+        id: modules-cache
+        uses: actions/cache@9b0c1fce7a93df8e3bb8926b0d6e9d89e92f20a7 #v3.0.11
+        with:
+          path: "**/node_modules"
+          key: ${{ runner.os }}-modules-${{ hashFiles('**/package-lock.json') }}
 
-      # - name: Setup Node
-      #   uses: actions/setup-node@8c91899e586c5b171469028077307d293428b516 # v3.5.1
-      #   with:
-      #     node-version: "16"
-      #     cache: "npm"
-      #     cache-dependency-path: "**/package-lock.json"
+      - name: Install dependencies
+        if: ${{ steps.modules-cache.outputs.cache-hit != 'true' }}
+        run: npm install
 
-      # - name: Node modules cache
-      #   id: modules-cache
-      #   uses: actions/cache@9b0c1fce7a93df8e3bb8926b0d6e9d89e92f20a7 #v3.0.11
-      #   with:
-      #     path: "**/node_modules"
-      #     key: ${{ runner.os }}-modules-${{ hashFiles('**/package-lock.json') }}
+      - name: Load prior build from cache if available
+        id: build-cache
+        uses: actions/cache@9b0c1fce7a93df8e3bb8926b0d6e9d89e92f20a7 #v3.0.11
+        with:
+          path: "**/dist/**"
+          key: ${{ runner.os }}-build-${{ hashFiles('**/dist/**') }}
 
-      # - name: Install dependencies
-      #   working-directory: Meadowlark-js/backends/meadowlark-mongodb-backend
-      #   if: ${{ steps.modules-cache.outputs.cache-hit != 'true' }}
-      #   run: npm install
+      - name: Build Typescript
+        if: ${{ steps.build-cache.outputs.cache-hit != 'true' }}
+        run: npm run build
 
-      # - name: Load prior build from cache if available
-      #   id: build-cache
-      #   uses: actions/cache@9b0c1fce7a93df8e3bb8926b0d6e9d89e92f20a7 #v3.0.11
-      #   with:
-      #     path: "**/dist/**"
-      #     key: ${{ runner.os }}-build-${{ hashFiles('**/dist/**') }}
+      - name: Publish-mongodb
+        working-directory: Meadowlark-js/backends/meadowlark-mongodb-backend
+        run: npm publish
 
-      # - name: Build
-      #   working-directory: Meadowlark-js/backends/meadowlark-mongodb-backend
-      #   run: npm run build
+      - name: Publish-opensearch
+        working-directory: Meadowlark-js/backends/meadowlark-opensearch-backend
+        run: npm publish
 
-      # - name: Publish
-      #   working-directory: Meadowlark-js/backends/meadowlark-mongodb-backend
-      #   run: npm publish
+      - name: Publish-postgresql
+        working-directory: Meadowlark-js/backends/meadowlark-postgresql-backend
+        run: npm publish
+
+      - name: Publish-authz-server
+        working-directory: Meadowlark-js/packages/meadowlark-authz-server
+        run: npm publish
+
+      - name: Publish-core
+        working-directory: Meadowlark-js/packages/meadowlark-core
+        run: npm publish
+
+      - name: Publish-services-fastify
+        working-directory: Meadowlark-js/services/meadowlark-fastify
+        run: npm publish
