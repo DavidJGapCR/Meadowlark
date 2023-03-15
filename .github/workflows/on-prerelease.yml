@@ -33,7 +33,7 @@ jobs:
         id: base64-test
         shell: bash
         # run: echo ARTIFACTS_API_KEY_BASE64=${{ env.ARTIFACTS_API_KEY }} | base64 -w 0 >> $GITHUB_OUTPUT
-        run: echo "::set-output name=ARTIFACTS_API_KEY_BASE64::$(echo '${{ secrets.ARTIFACTS_API_KEY }}' | base64 -w 0)"
+        run: echo "::set-output name=ARTIFACTS_API_KEY_BASE64::$(echo '${{ env.ARTIFACTS_API_KEY }}' | base64 -w 0)"
 
       - name: Get color
         run: echo "base 64 is ${{ steps.base64-test.outputs.ARTIFACTS_API_KEY_BASE64 }}"
