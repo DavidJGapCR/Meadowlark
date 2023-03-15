@@ -16,7 +16,7 @@ on:
   #     - prereleased
 
 env:
-  ARTIFACTS_API_KEY: ${{ secrets.AZURE_ARTIFACTS_PERSONAL_ACCESS_TOKEN }} | base64 -w 0
+  ARTIFACTS_API_KEY: ${{ secrets.AZURE_ARTIFACTS_PERSONAL_ACCESS_TOKEN }}
   # GITHUB_TOKEN: ${{ secrets.PAT_ATTACH_TO_RELEASE }}
 
 jobs:
@@ -26,12 +26,15 @@ jobs:
     outputs:
       hash-code: ${{ steps.hash-code.outputs.hash-code }}
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@755da8c3cf115ac066823e79a1e1788f8940201b # v3.2.0
+      # - name: Checkout repository
+      #   uses: actions/checkout@755da8c3cf115ac066823e79a1e1788f8940201b # v3.2.0
 
-      - name: list
-        run: |
-          echo ${{ env.ARTIFACTS_API_KEY }}
+      - namne: base64test
+        id: base64-test
+        run: echo "ARTIFACTS_API_KEY_BASE64=${{ ARTIFACTS_API_KEY}}" | base64 -w 0 >> $GITHUB_OUTPUT
+
+         - name: Get color
+        run: echo "base 64 is ${{ steps.base64-test.outputs.ARTIFACTS_API_KEY_BASE64 }}"
 
       # - name: Create user .npmrc file for mongodb.
       #   run: |
