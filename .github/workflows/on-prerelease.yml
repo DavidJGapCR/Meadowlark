@@ -67,26 +67,30 @@ jobs:
         if: ${{ steps.build-cache.outputs.cache-hit != 'true' }}
         run: npm run build
 
-      - name: Publish-mongodb
+      - name: Publish-mongodb-backend
         working-directory: Meadowlark-js/backends/meadowlark-mongodb-backend
         run: npm publish
 
-      - name: Publish-opensearch
+      - name: Publish-opensearch-backend
         working-directory: Meadowlark-js/backends/meadowlark-opensearch-backend
         run: npm publish
 
-      - name: Publish-postgresql
+      - name: Publish-postgresql-backend
         working-directory: Meadowlark-js/backends/meadowlark-postgresql-backend
         run: npm publish
 
-      - name: Publish-authz-server
+      - name: Publish-authz-server-package
         working-directory: Meadowlark-js/packages/meadowlark-authz-server
         run: npm publish
 
-      - name: Publish-core
+      - name: Publish-core-package
         working-directory: Meadowlark-js/packages/meadowlark-core
         run: npm publish
 
-      - name: Publish-services-fastify
+      - name: Publish-utilities-package
+        working-directory: Meadowlark-js/packages/meadowlark-utilities
+        run: npm publish
+
+      - name: Publish-fastify-service
         working-directory: Meadowlark-js/services/meadowlark-fastify
         run: npm publish
