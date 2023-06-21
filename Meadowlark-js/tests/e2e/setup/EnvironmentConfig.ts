@@ -3,56 +3,45 @@
 // The Ed-Fi Alliance licenses this file to you under the Apache License, Version 2.0.
 // See the LICENSE and NOTICES files in the project root for more information.
 
-import path from 'path';
-
-import { DockerComposeEnvironment, StartedDockerComposeEnvironment, StartedTestContainer, Wait } from 'testcontainers';
-import { endLog, setLogTracing } from './LogConfig';
-
-let environment: StartedDockerComposeEnvironment;
-
-const mongoContainerName = 'mongo-test1';
-const openSearchContainerName = 'opensearch-test';
+import { Network, StartedNetwork } from 'testcontainers';
+import * as ApiContainer from './containers/ApiContainer';
+import * as MongoContainer from './containers/MongoContainer';
+import * as OpenSearchContainer from './containers/OpenSearchContainer';
+import * as PostgreSqlContainer from './containers/PostgresqlContainer';
+import { endLog } from './LogConfig';
 
 export async function stop() {
   endLog();
   console.info('-- Tearing down environment --');
-  await environment.stop();
-  await environment.down();
+  await Promise.all([MongoContainer.stop(), ApiContainer.stop(), OpenSearchContainer.stop()]);
+  if (process.env.DOCUMENT_STORE_PLUGIN === '@edfi/meadowlark-postgresql-backend') {
+    console.info('-- Tearing down postgres --');
+    await PostgreSqlContainer.stop();
+  }
 }
 
-async function executeCommand(container: StartedTestContainer, script: string[]): Promise<string> {
-  return container.exec(script).then((result) => {
-    if (result.exitCode !== 0) {
-      console.error(result.output);
-      throw result.output;
+export async function configure(initialize = true) {
+  let network: StartedNetwork;
+  try {
+    network = await new Network().start();
+  } catch (error) {
+    throw new Error(`\n${error}`);
+  }
+
+  if (!initialize) {
+    console.warn(
+      '⚠️ WARNING: Skipping initialization. Containers should be already be started, if not, setup with `test:e2e:dev:setup`⚠️',
+    );
+  } else {
+    console.info('-- Setting up containers --');
+    // Starting Mongo container since it's required for Authentication
+    await Promise.all([MongoContainer.setup(network), ApiContainer.setup(network), OpenSearchContainer.setup(network)]);
+
+    if (process.env.DOCUMENT_STORE_PLUGIN === '@edfi/meadowlark-postgresql-backend') {
+      console.info('-- Setting up postgres --');
+      await PostgreSqlContainer.setup(network);
     }
-    return result.output;
-  });
-}
+  }
 
-async function setMongoUser(mongoContainer: StartedTestContainer) {
-  await executeCommand(mongoContainer, ['./scripts/mongo-rs-setup.sh']);
-
-  await new Promise((r) => {
-    setTimeout(r, 30 * 1000);
-  });
-
-  await executeCommand(mongoContainer, ['./scripts/mongo-user-setup.sh']);
-}
-
-export async function configure() {
-  const composeFilePath = path.resolve(__dirname, './');
-  const composeFile = 'docker-compose.yml';
-  environment = await new DockerComposeEnvironment(composeFilePath, composeFile)
-    .withWaitStrategy(mongoContainerName, Wait.forHealthCheck())
-    .withWaitStrategy(openSearchContainerName, Wait.forHealthCheck())
-    .withStartupTimeout(120_000)
-    .up();
-
-  console.debug('-- Setting log tracing --');
-  await setLogTracing(environment);
-  const mongoContainer = environment.getContainer(mongoContainerName);
-  console.debug('-- Setting up mongo user --');
-  await setMongoUser(mongoContainer);
   console.debug('-- Environment Ready --');
 }

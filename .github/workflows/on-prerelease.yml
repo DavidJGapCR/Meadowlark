@@ -5,37 +5,34 @@
 
 name: On Pre-Release
 on:
-  workflow_dispatch:
-  # release:
-  #   types:
-  #     - prereleased
+  release:
+    types:
+      - prereleased
 
 env:
-  ARTIFACTS_API_KEY: ${{ secrets.AZURE_ARTIFACTS_PERSONAL_ACCESS_TOKEN }} # | base64 # ToDo: For some reason the pipe is not returning the expected value. Do not know why yet.
-  # GITHUB_TOKEN: ${{ secrets.PAT_ATTACH_TO_RELEASE }}
+  ARTIFACTS_API_KEY: ${{ secrets.AZURE_ARTIFACTS_PERSONAL_ACCESS_TOKEN }}
+  GITHUB_TOKEN: ${{ secrets.PAT_ATTACH_TO_RELEASE }}
+  DOCKER_HUB_TOKEN: ${{ secrets.DOCKER_HUB_TOKEN }}
+  DOCKER_USERNAME: ${{ vars.DOCKER_USERNAME }}
+  REF: ${{ github.ref_name }}
+  IMAGE_NAME: ${{ vars.MEADOWLARK_IMAGE_NAME }}
+  NPM_REGISTRY: ${{ vars.NPM_REGISTRY }}
 
 jobs:
   azure-publish:
-    name: Publish Meadowlark mongodb
+    name: Publish to Azure Artifacts
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Meadowlark-js
     outputs:
       hash-code: ${{ steps.hash-code.outputs.hash-code }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@755da8c3cf115ac066823e79a1e1788f8940201b # v3.2.0
-
-      - name: Create user .npmrc file for mongodb.
-        run: |
-          # Create the user .npmrc file with proper settings
-          touch $HOME/.npmrc
-          echo "; begin auth token" >> .npmrc
-          echo //pkgs.dev.azure.com/ed-fi-alliance/Ed-Fi-Alliance-OSS/_packaging/EdFi/npm/registry/:username=ed-fi-alliance >> $HOME/.npmrc
-          echo //pkgs.dev.azure.com/ed-fi-alliance/Ed-Fi-Alliance-OSS/_packaging/EdFi/npm/registry/:_password=${{ env.ARTIFACTS_API_KEY }} >> $HOME/.npmrc
-          echo //pkgs.dev.azure.com/ed-fi-alliance/Ed-Fi-Alliance-OSS/_packaging/EdFi/npm/registry/:email=not-used@example.com >> $HOME/.npmrc
-          echo //pkgs.dev.azure.com/ed-fi-alliance/Ed-Fi-Alliance-OSS/_packaging/EdFi/npm/:username=ed-fi-alliance >> $HOME/.npmrc
-          echo //pkgs.dev.azure.com/ed-fi-alliance/Ed-Fi-Alliance-OSS/_packaging/EdFi/npm/:_password=${{ env.ARTIFACTS_API_KEY }} >> $HOME/.npmrc
-          echo //pkgs.dev.azure.com/ed-fi-alliance/Ed-Fi-Alliance-OSS/_packaging/EdFi/npm/:email=not-used@example.com >> $HOME/.npmrc
-          echo "; end auth token" >> $HOME/.npmrc
+        uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c # v3.3.0
+        with:
+          # Need full Git history for calculating the version number
+          fetch-depth: 0
 
       - name: Setup Node
         uses: actions/setup-node@8c91899e586c5b171469028077307d293428b516 # v3.5.1
@@ -45,34 +42,212 @@ jobs:
           cache-dependency-path: "**/package-lock.json"
 
       - name: Install dependencies
-        working-directory: Meadowlark-js
         if: ${{ steps.modules-cache.outputs.cache-hit != 'true' }}
-        run: npm install
+        run: npm ci
 
-      - name: Publish-mongodb-backend
-        working-directory: Meadowlark-js/backends/meadowlark-mongodb-backend
-        run: npm publish
+      - name: Update version to match tag
+        working-directory: eng/version
+        run: |
+          npm ci --omit dev
+          node ./set.js ${{ env.REF }}
 
-      - name: Publish-opensearch-backend
-        working-directory: Meadowlark-js/backends/meadowlark-opensearch-backend
-        run: npm publish
+      - name: Transpile to JS
+        run: npm run build --workspaces
 
-      - name: Publish-postgresql-backend
-        working-directory: Meadowlark-js/backends/meadowlark-postgresql-backend
-        run: npm publish
+      - name: Create packages
+        # Explicit step is not required for publishing, but it allows us to upload artifacts
+        run: npm pack --workspaces
 
-      - name: Publish-authz-server-package
-        working-directory: Meadowlark-js/packages/meadowlark-authz-server
-        run: npm publish
+      - name: Create .npmrc for Azure Artifacts publishing
+        run: |
+          echo "Configuring .npmrc for ${{ env.NPM_REGISTRY }}"
+          set +x  # disable echo to shell so that the base64-encoded API key never escapes into the log.
 
-      - name: Publish-core-package
-        working-directory: Meadowlark-js/packages/meadowlark-core
-        run: npm publish
+          # Create the user .npmrc file with proper settings
+          API_KEY=`echo -n "${{ env.ARTIFACTS_API_KEY }}" | base64`
+          touch $HOME/.npmrc
+          echo "; begin auth token" >> $HOME/.npmrc
+          echo ${{ env.NPM_REGISTRY }}:username=ed-fi-alliance >> $HOME/.npmrc
+          echo ${{ env.NPM_REGISTRY }}:_password=$API_KEY >> $HOME/.npmrc
+          echo ${{ env.NPM_REGISTRY }}:email=techsupport@ed-fi.org >> $HOME/.npmrc
+          echo "; end auth token" >> $HOME/.npmrc
 
-      - name: Publish-utilities-package
-        working-directory: Meadowlark-js/packages/meadowlark-utilities
-        run: npm publish
+      - name: Publish
+        run: npm publish --workspaces --tag dev
+        # NOTE: there are uncommitted version number changes in package.json. No
+        # problem! Our strategy is to rely on the tag history for version numbers,
+        # not on package.json.
 
-      - name: Publish-fastify-service
-        working-directory: Meadowlark-js/services/meadowlark-fastify
-        run: npm publish
+      - name: Generate hash codes for npm tarballs
+        id: hash-code
+        shell: bash
+        run: |
+          echo "hash-code=$(sha256sum *.tgz | base64 -w0)" >> $GITHUB_OUTPUT
+
+      - name: Upload packages as artifacts
+        if: success()
+        uses: actions/upload-artifact@0b7f8abb1508181956e8e162db84b466c27e18ce # v3.1.2
+        with:
+          name: npm
+          path: Meadowlark-js/*.tgz
+          if-no-files-found: error
+          retention-days: 30
+
+  docker-publish:
+    name: Publish to Docker Hub
+    runs-on: ubuntu-latest
+    needs:
+      - azure-publish
+    steps:
+      - name: Wait 20s
+        # Give Azure Artifacts caching a moment to catch up
+        run: sleep 20
+
+      - name: Prepare Tags
+        id: prepare-tags
+        run: |
+          BASE="${{ env.IMAGE_NAME }}"
+
+          REF="${{ env.REF }}"
+          NPM_VERSION=${REF:1}  # strip off the leading 'v'
+
+          if [[ $REF =~ "pre" ]]
+          then
+            # Pre-releases get the version and the tag "pre"
+            TAGS="${{ env.IMAGE_NAME }}:${REF},${{ env.IMAGE_NAME }}:pre"
+          else
+            # Releases get the version, plus shortened form for minor release.
+            # We are not using shortened form for major or using "latest"
+            # because they are too imprecise.
+            MINOR=`echo ${REF} | awk -F"." '{print $1"."$2}'`
+            TAGS="${{ env.IMAGE_NAME }}:${REF},${{ env.IMAGE_NAME }}:${MINOR}"
+          fi
+
+          echo "TAGS=$TAGS" >> $GITHUB_OUTPUT
+          echo "NPM_VERSION=$NPM_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@4b4e9c3e2d4531116a6f8ba8e71fc6e2cb6e6c8c  # v2.5.0
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@f4ef78c080cd8ba55a85445d5b36e214a81df20a  # v2.1.0
+        with:
+          username: ${{ env.DOCKER_USERNAME }}
+          password: ${{ env.DOCKER_HUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@507c2f2dc502c992ad446e3d7a5dfbe311567a96  # v4.3.0
+        with:
+          images: ${{ env.IMAGE_NAME }}
+
+      - name: Build and push
+        uses: docker/build-push-action@3b5e8027fcad23fda98b2e3ac259d8d67585f671  # v4.0.0
+        with:
+          context: "{{defaultContext}}:docker"
+          cache-from: type=registry,ref=${{ env.IMAGE_NAME }}:pre
+          cache-to: type=inline
+          build-args: ML_VERSION=${{ steps.prepare-tags.outputs.NPM_VERSION }}
+          file: Dockerfile
+          tags: ${{ steps.prepare-tags.outputs.TAGS }}
+          labels: ${{ steps.meta.outputs.labels }}
+          push: true
+
+  sbom-create:
+    name: Create SBOM for NPM Packages
+    runs-on: ubuntu-latest
+    needs: azure-publish
+    permissions:
+      actions: read
+      contents: write
+    outputs:
+      sbom-hash-code: ${{ steps.sbom-hash-code.outputs.sbom-hash-code }}
+    steps:
+      - uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c # v3.3.0
+
+      - name: Get Artifacts
+        uses: actions/download-artifact@9bc31d5ccc31df68ecc42ccf4149144866c47d8a #v3.0.2
+        with:
+          name: npm
+
+      - name: Generate Software Bill of Materials (SBOM) - API
+        shell: pwsh
+        run: |
+          $url = "https://github.com/microsoft/sbom-tool/releases/latest/download/sbom-tool-linux-x64"
+          $out = "$($env:RUNNER_TEMP)/sbom-tool"
+          Invoke-RestMethod -Uri $url -OutFile $out
+          chmod +x $out
+          New-Item -Path sbom -Type Directory
+          &$out generate `
+              -b . `
+              -pn "Ed-Fi-Meadowlark" `
+              -pv ${{ env.REF }} `
+              -nsb https://ed-fi.org `
+              -m sbom `
+              -ps "Ed-Fi Alliance"
+      - name: Upload SBOM
+        if: success()
+        uses: actions/upload-artifact@0b7f8abb1508181956e8e162db84b466c27e18ce # v3.1.2
+        with:
+          name: meadowlark-SBOM
+          path: ./sbom
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Store hash code for SBOM
+        id: sbom-hash-code
+        shell: bash
+        run: |
+          echo sbom-hash-code=$(iconv -f UTF-16 -t ASCII ./sbom/_manifest/spdx_2.2/manifest.spdx.json.sha256) >> $GITHUB_OUTPUT
+
+  sbom-attach:
+    name: Attach SBOM file
+    runs-on: ubuntu-latest
+    needs:
+      - sbom-create
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - name: Download the SBOM
+        uses: slsa-framework/slsa-github-generator/.github/actions/secure-download-artifact@7f4fdb871876c23e455853d694197440c5a91506 #v1.5.0
+        with:
+          name: meadowlark-SBOM
+          path: _manifest/spdx_2.2/manifest.spdx.json
+          sha256: "${{ needs.sbom-create.outputs.sbom-hash-code }}"
+
+      - name: Attach to release
+        shell: pwsh
+        run: |
+          $release = "${{ env.REF }}"
+          $repo = "${{ github.repository }}"
+          $token = "${{ secrets.GITHUB_TOKEN }}"
+          $file = "_manifest/spdx_2.2/manifest.spdx.json"
+          $uploadName = "meadowlark-SBOM.zip"
+          $url = "https://api.github.com/repos/$repo/releases/tags/$release"
+          $gh_headers = @{
+              "Accept"        = "application/vnd.github+json"
+              "Authorization" = "Bearer $token"
+          }
+          $response = Invoke-RestMethod -Uri $url -Headers $gh_headers
+          $releaseId = $response.id
+          $url = "https://uploads.github.com/repos/$repo/releases/$releaseId/assets"
+          Compress-Archive $file -DestinationPath $uploadName
+          $gh_headers["Content-Type"] = "application/octet"
+          Invoke-RestMethod -Method POST `
+              -Uri "$($url)?name=$($uploadName)" `
+              -Headers $gh_headers `
+              -InFile $uploadName
+
+  provenance-create:
+    name: Create Provenance
+    needs: azure-publish
+    permissions:
+      actions: read
+      id-token: write
+      contents: write
+    uses: Ed-Fi-Alliance-OSS/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v1.5.0
+    with:
+      base64-subjects: ${{ needs.azure-publish.outputs.hash-code }}
+      provenance-name: meadowlark.intoto.jsonl
+      upload-assets: true

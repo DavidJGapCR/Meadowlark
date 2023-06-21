@@ -5,10 +5,9 @@
 
 import type { FastifyInstance, InjectOptions } from 'fastify';
 import * as AuthorizationServer from '@edfi/meadowlark-authz-server';
+import * as MeadowlarkConnection from '../../src/handler/MeadowlarkConnection';
 import { buildService } from '../../src/Service';
 import { setupMockConfiguration } from '../ConfigHelper';
-
-jest.setTimeout(40000);
 
 const updateClientRequest: InjectOptions = {
   method: 'PUT',
@@ -30,6 +29,7 @@ describe('given a PUT to update a new client', () => {
   beforeAll(async () => {
     setupMockConfiguration();
     mockUpsert = jest.spyOn(AuthorizationServer, 'updateClient');
+    jest.spyOn(MeadowlarkConnection, 'closeMeadowlarkConnection').mockResolvedValue();
     service = buildService();
     await service.ready();
 

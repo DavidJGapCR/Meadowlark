@@ -22,12 +22,10 @@ import {
 import type { PoolClient } from 'pg';
 import { resetSharedClient, getSharedClient } from '../../src/repository/Db';
 import { deleteAll } from './TestHelper';
-import { getDocumentById } from '../../src/repository/Get';
-import { findDocumentByIdSql } from '../../src/repository/SqlHelper';
+import { getDocumentByDocumentUuid } from '../../src/repository/Get';
+import { findDocumentByMeadowlarkId } from '../../src/repository/SqlHelper';
 import { upsertDocument } from '../../src/repository/Upsert';
-import { setupConfigForIntegration } from './Config';
-
-jest.setTimeout(40000);
+import { MeadowlarkDocument, isMeadowlarkDocumentEmpty } from '../../src/model/MeadowlarkDocument';
 
 const newGetRequest = (): GetRequest => ({
   documentUuid: 'deb6ea15-fa93-4389-89a8-1428fb617490' as DocumentUuid,
@@ -59,16 +57,12 @@ describe('given the get of a non-existent document', () => {
     documentIdentity: { natural: 'get1' },
   };
   const meadowlarkId = meadowlarkIdForDocumentIdentity(resourceInfo, documentInfo.documentIdentity);
+  const documentUuid = 'ffb6ea15-fa93-4389-89a8-1428fb617490' as DocumentUuid;
 
   beforeAll(async () => {
-    await setupConfigForIntegration();
-
     client = await getSharedClient();
 
-    getResult = await getDocumentById(
-      { ...newGetRequest(), documentUuid: meadowlarkId as unknown as DocumentUuid, resourceInfo },
-      client,
-    );
+    getResult = await getDocumentByDocumentUuid({ ...newGetRequest(), documentUuid, resourceInfo }, client);
   });
 
   afterAll(async () => {
@@ -78,9 +72,9 @@ describe('given the get of a non-existent document', () => {
   });
 
   it('should not exist in the db', async () => {
-    const result = await client.query(findDocumentByIdSql(meadowlarkId));
+    const result: MeadowlarkDocument = await findDocumentByMeadowlarkId(client, meadowlarkId);
 
-    expect(result.rowCount).toBe(0);
+    expect(isMeadowlarkDocumentEmpty(result)).toBe(true);
   });
 
   it('should return get failure', async () => {
@@ -103,16 +97,20 @@ describe('given the get of an existing document', () => {
   const meadowlarkId = meadowlarkIdForDocumentIdentity(resourceInfo, documentInfo.documentIdentity);
 
   beforeAll(async () => {
-    await setupConfigForIntegration();
-
     client = await getSharedClient();
     const upsertRequest: UpsertRequest = { ...newUpsertRequest(), meadowlarkId, documentInfo, edfiDoc: { inserted: 'yes' } };
-
+    let resultDocumentUuid: DocumentUuid;
     // insert the initial version
-    await upsertDocument(upsertRequest, client);
-
-    getResult = await getDocumentById(
-      { ...newGetRequest(), documentUuid: meadowlarkId as unknown as DocumentUuid, resourceInfo },
+    const upsertResult = await upsertDocument(upsertRequest, client);
+    if (upsertResult.response === 'INSERT_SUCCESS') {
+      resultDocumentUuid = upsertResult.newDocumentUuid;
+    } else if (upsertResult.response === 'UPDATE_SUCCESS') {
+      resultDocumentUuid = upsertResult.existingDocumentUuid;
+    } else {
+      resultDocumentUuid = '' as DocumentUuid;
+    }
+    getResult = await getDocumentByDocumentUuid(
+      { ...newGetRequest(), documentUuid: resultDocumentUuid, resourceInfo },
       client,
     );
   });

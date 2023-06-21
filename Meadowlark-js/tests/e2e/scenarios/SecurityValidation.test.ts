@@ -91,7 +91,7 @@ describe('given the existence of two vendors and one host', () => {
   });
 
   afterAll(async () => {
-    await deleteResourceByLocation(contentClassDescriptorLocation);
+    await deleteResourceByLocation(contentClassDescriptorLocation, 'contentClassDescriptor');
   });
 
   // GET
@@ -225,6 +225,19 @@ describe('given the existence of two vendors and one host', () => {
           .auth(vendor1DataAccessToken, { type: 'bearer' })
           .send(resourceBodyPutUpdated)
           .expect(204);
+      });
+    });
+
+    describe('when a different vendor tries to insert an existing resource', () => {
+      it('should return error', async () => {
+        await rootURLRequest()
+          .post(resourceLocation.slice(0, resourceLocation.lastIndexOf('/')))
+          .auth(vendor2DataAccessToken, { type: 'bearer' })
+          .send(resourceBodyPutUpdated)
+          .expect(403)
+          .then((response) => {
+            expect(response.body).toBe('');
+          });
       });
     });
 

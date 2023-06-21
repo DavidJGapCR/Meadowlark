@@ -9,10 +9,11 @@ import { Collection, ClientSession, MongoClient, WithId } from 'mongodb';
 import {
   UpsertResult,
   UpsertRequest,
-  documentIdForSuperclassInfo,
-  BlockingDocument,
+  getMeadowlarkIdForSuperclassInfo,
+  ReferringDocumentInfo,
   DocumentUuid,
   generateDocumentUuid,
+  MeadowlarkId,
 } from '@edfi/meadowlark-core';
 import { Logger, Config } from '@edfi/meadowlark-utilities';
 import retry from 'async-retry';
@@ -36,35 +37,39 @@ export async function upsertDocumentTransaction(
 
   // the documentUuid of the existing document if this is an update, or a new one if this is an insert
   const documentUuid: DocumentUuid | null = existingDocument?.documentUuid ?? generateDocumentUuid();
-
+  // Unix timestamp
+  const createdAt: number = existingDocument?.createdAt ?? Date.now();
+  // last modified date as an Unix timestamp.
+  const lastModifiedAt: number = Date.now();
   // Check whether this is an insert or update
   const isInsert: boolean = existingDocument == null;
 
   // If inserting a subclass, check whether the superclass identity is already claimed by a different subclass
   if (isInsert && documentInfo.superclassInfo != null) {
-    const superclassAliasId: string = documentIdForSuperclassInfo(documentInfo.superclassInfo);
-    const superclassAliasIdInUse: WithId<MeadowlarkDocument> | null = await mongoCollection.findOne(
+    const superclassAliasMeadowlarkId: MeadowlarkId = getMeadowlarkIdForSuperclassInfo(documentInfo.superclassInfo);
+    const superclassAliasMeadowlarkIdInUse: WithId<MeadowlarkDocument> | null = await mongoCollection.findOne(
       {
-        aliasIds: superclassAliasId,
+        aliasMeadowlarkIds: superclassAliasMeadowlarkId,
       },
       { session },
     );
 
-    if (superclassAliasIdInUse) {
+    if (superclassAliasMeadowlarkIdInUse) {
       Logger.warn(
-        `${moduleName}.upsertDocumentTransaction insert failed due to another subclass with documentUuid ${superclassAliasIdInUse.documentUuid} and the same identity ${superclassAliasIdInUse._id}`,
+        `${moduleName}.upsertDocumentTransaction insert failed due to another subclass with documentUuid ${superclassAliasMeadowlarkIdInUse.documentUuid} and the same identity ${superclassAliasMeadowlarkIdInUse._id}`,
         traceId,
       );
 
       return {
         response: 'INSERT_FAILURE_CONFLICT',
         failureMessage: `Insert failed: the identity is in use by '${resourceInfo.resourceName}' which is also a(n) '${documentInfo.superclassInfo.resourceName}'`,
-        blockingDocuments: [
+        referringDocumentInfo: [
           {
-            documentUuid: superclassAliasIdInUse.documentUuid,
-            resourceName: superclassAliasIdInUse.resourceName,
-            projectName: superclassAliasIdInUse.projectName,
-            resourceVersion: superclassAliasIdInUse.resourceVersion,
+            documentUuid: superclassAliasMeadowlarkIdInUse.documentUuid,
+            meadowlarkId: superclassAliasMeadowlarkIdInUse._id,
+            resourceName: superclassAliasMeadowlarkIdInUse.resourceName,
+            projectName: superclassAliasMeadowlarkIdInUse.projectName,
+            resourceVersion: superclassAliasMeadowlarkIdInUse.resourceVersion,
           },
         ],
       };
@@ -83,7 +88,7 @@ export async function upsertDocumentTransaction(
     // Abort on validation failure
     if (failures.length > 0) {
       Logger.debug(
-        `${moduleName}.upsertDocumentTransaction Upserting document uuid ${documentUuid} failed due to invalid references`,
+        `${moduleName}.upsertDocumentTransaction Upserting DocumentUuid ${documentUuid} failed due to invalid references`,
         traceId,
       );
 
@@ -91,8 +96,9 @@ export async function upsertDocumentTransaction(
         .find(onlyDocumentsReferencing([meadowlarkId]), limitFive(session))
         .toArray();
 
-      const blockingDocuments: BlockingDocument[] = referringDocuments.map((document) => ({
-        documentUuid: document._id,
+      const referringDocumentInfo: ReferringDocumentInfo[] = referringDocuments.map((document) => ({
+        documentUuid: document.documentUuid,
+        meadowlarkId: document._id,
         resourceName: document.resourceName,
         projectName: document.projectName,
         resourceVersion: document.resourceVersion,
@@ -101,7 +107,7 @@ export async function upsertDocumentTransaction(
       return {
         response: isInsert ? 'INSERT_FAILURE_REFERENCE' : 'UPDATE_FAILURE_REFERENCE',
         failureMessage: { error: { message: 'Reference validation failed', failures } },
-        blockingDocuments,
+        referringDocumentInfo,
       };
     }
   }
@@ -116,6 +122,8 @@ export async function upsertDocumentTransaction(
       edfiDoc,
       validateDocumentReferencesExist,
       security.clientId,
+      createdAt,
+      lastModifiedAt,
     );
 
   await writeLockReferencedDocuments(mongoCollection, document.outboundRefs, session);

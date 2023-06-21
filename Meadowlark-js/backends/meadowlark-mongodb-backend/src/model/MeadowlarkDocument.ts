@@ -5,8 +5,8 @@
 
 import {
   DocumentIdentity,
-  documentIdForDocumentReference,
-  documentIdForSuperclassInfo,
+  getMeadowlarkIdForDocumentReference,
+  getMeadowlarkIdForSuperclassInfo,
   DocumentInfo,
   DocumentReference,
   MeadowlarkId,
@@ -59,11 +59,11 @@ export interface MeadowlarkDocument extends MeadowlarkDocumentId {
    * An array of ids extracted from the ODS/API document for all externally
    * referenced documents.
    */
-  outboundRefs: string[];
+  outboundRefs: MeadowlarkId[];
 
   /**
    * An array of ids this document will satisfy when reference validation performs existence checks.
-   * This array always includes the document id itself. If this document is a subclass, the array will also
+   * This array always includes the document meadowlark id itself. If this document is a subclass, the array will also
    * contain the id of this document in superclass form (superclass name and project, identity property
    * naming differences - like schoolId versus educationOrganizationId - accounted for). Such an id is an alias.
    *
@@ -78,7 +78,7 @@ export interface MeadowlarkDocument extends MeadowlarkDocumentId {
    *          a reference from ClassPeriod to a School with schoolId=123, as well as a reference from
    *          Assessment to EducationOrganization with educationOrganizationId=123.
    */
-  aliasIds: string[];
+  aliasMeadowlarkIds: MeadowlarkId[];
 
   /**
    * True if this document has been reference and descriptor validated.
@@ -95,6 +95,21 @@ export interface MeadowlarkDocument extends MeadowlarkDocumentId {
    */
   createdBy: string;
 
+  /*
+   * Creation date as  as Unix timestamp.
+   */
+  createdAt?: number | undefined;
+
+  /*
+   * Last modified date as  as Unix timestamp.
+   */
+  lastModifiedAt?: number | undefined;
+
+  /*
+   * Last modified date (UTC Format).
+   */
+  _lastModifiedDate?: string | undefined;
+
   /**
    * An ObjectId managed by Meadowlark transactions for read locking. Optional because it does not need to be
    * set in code. See https://www.mongodb.com/blog/post/how-to-select--for-update-inside-mongodb-transactions
@@ -102,10 +117,10 @@ export interface MeadowlarkDocument extends MeadowlarkDocumentId {
   lock?: any;
 }
 
-function referencedDocumentIdsFrom(documentInfo: DocumentInfo): string[] {
+function referencedDocumentIdsFrom(documentInfo: DocumentInfo): MeadowlarkId[] {
   return [
-    ...documentInfo.documentReferences.map((dr: DocumentReference) => documentIdForDocumentReference(dr)),
-    ...documentInfo.descriptorReferences.map((dr: DocumentReference) => documentIdForDocumentReference(dr)),
+    ...documentInfo.documentReferences.map((dr: DocumentReference) => getMeadowlarkIdForDocumentReference(dr)),
+    ...documentInfo.descriptorReferences.map((dr: DocumentReference) => getMeadowlarkIdForDocumentReference(dr)),
   ];
 }
 
@@ -117,10 +132,12 @@ export function meadowlarkDocumentFrom(
   edfiDoc: object,
   validate: boolean,
   createdBy: string,
+  createdAt: number,
+  lastModifiedAt: number,
 ): MeadowlarkDocument {
-  const aliasIds: string[] = [meadowlarkId];
+  const aliasMeadowlarkIds: MeadowlarkId[] = [meadowlarkId];
   if (documentInfo.superclassInfo != null) {
-    aliasIds.push(documentIdForSuperclassInfo(documentInfo.superclassInfo));
+    aliasMeadowlarkIds.push(getMeadowlarkIdForSuperclassInfo(documentInfo.superclassInfo));
   }
 
   return {
@@ -132,9 +149,11 @@ export function meadowlarkDocumentFrom(
     documentUuid,
     _id: meadowlarkId,
     edfiDoc,
-    aliasIds,
+    aliasMeadowlarkIds,
     outboundRefs: referencedDocumentIdsFrom(documentInfo),
     validated: validate,
     createdBy,
+    createdAt,
+    lastModifiedAt,
   };
 }

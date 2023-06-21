@@ -6,10 +6,10 @@
 import type { FastifyInstance, InjectOptions } from 'fastify';
 import * as MeadowlarkCore from '@edfi/meadowlark-core';
 import { initializeLogging } from '@edfi/meadowlark-utilities';
+import { newFrontendResponseSuccess } from '@edfi/meadowlark-core';
 import { buildService } from '../src/Service';
 import { setupMockConfiguration } from './ConfigHelper';
-
-jest.setTimeout(40000);
+import * as MeadowlarkConnection from '../src/handler/MeadowlarkConnection';
 
 const schoolPutRequest: InjectOptions = {
   method: 'PUT',
@@ -31,7 +31,9 @@ describe('given a PUT of a school', () => {
     setupMockConfiguration();
     initializeLogging();
 
-    mockUpdate = jest.spyOn(MeadowlarkCore, 'update');
+    mockUpdate = jest.spyOn(MeadowlarkCore, 'update').mockResolvedValue(newFrontendResponseSuccess());
+    jest.spyOn(MeadowlarkConnection, 'closeMeadowlarkConnection').mockResolvedValue();
+
     service = buildService();
     await service.ready();
 
@@ -49,7 +51,6 @@ describe('given a PUT of a school', () => {
     expect(mockUpdate.mock.calls).toHaveLength(1);
     const mock = mockUpdate.mock.calls[0][0];
 
-    expect(mock.action).toBe('updateById');
     expect(mock.body).toMatchInlineSnapshot(`
       "{
           "schoolId": 123,

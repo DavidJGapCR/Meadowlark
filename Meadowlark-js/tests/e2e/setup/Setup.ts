@@ -12,20 +12,22 @@ const setupEnvironment = require('./EnvironmentConfig');
 dotenv.config({ path: path.join(__dirname, './.env') });
 
 module.exports = async () => {
+  console.time('Setup Time');
+
+  console.debug('\n-- Configuring Environment --');
+
+  const initialize = process.env.DEVELOPER_MODE !== 'true';
+
+  await setupEnvironment.configure(initialize);
+
   process.env.ROOT_URL = `http://localhost:${process.env.FASTIFY_PORT ?? 3001}`;
   process.env.DOCUMENT_STORE_PLUGIN = process.env.DOCUMENT_STORE_PLUGIN ?? '@edfi/meadowlark-mongodb-backend';
   console.info(`\n🧪 Running e2e tests for ${process.env.ROOT_URL} with: ${process.env.DOCUMENT_STORE_PLUGIN} 🧪\n`);
 
-  console.time('Setup Time');
-  try {
-    console.debug('\n-- Configuring environment --');
-    await setupEnvironment.configure();
-  } catch (error) {
-    throw new Error(`Unexpected error setting up environment.\n${error}`);
-  }
-
-  console.debug('-- Authenticating Users --');
+  console.debug('-- Authenticating Admin --');
   await credentialManager.authenticateAdmin();
+
+  console.debug('-- Creating Automation Users --');
   await credentialManager.createAutomationUsers();
   console.timeEnd('Setup Time');
 };

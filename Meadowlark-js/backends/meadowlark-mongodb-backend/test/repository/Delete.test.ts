@@ -1,13 +1,11 @@
 import { DeleteRequest, newSecurity, TraceId, NoResourceInfo, DocumentUuid } from '@edfi/meadowlark-core';
 import * as utilities from '@edfi/meadowlark-utilities';
-import { deleteDocumentById } from '../../src/repository/Delete';
+import { deleteDocumentByDocumentUuid } from '../../src/repository/Delete';
 import * as DB from '../../src/repository/Db';
-
-jest.setTimeout(40000);
 
 describe('given a transaction on a resource', () => {
   const retryNumberOfTimes = 2;
-  let mongoClienttMock = {};
+  let mongoClientMock = {};
   let deleteOneMock = jest.fn();
   const error = {
     codeName: 'WriteConflict',
@@ -20,7 +18,7 @@ describe('given a transaction on a resource', () => {
       deleteOne: deleteOneMock,
     } as any);
 
-    mongoClienttMock = {
+    mongoClientMock = {
       startSession: jest.fn().mockReturnValue({
         withTransaction: async (cb: any) => {
           await cb();
@@ -44,7 +42,7 @@ describe('given a transaction on a resource', () => {
     describe('given that a number of retries greater than zero has been configured', () => {
       beforeAll(async () => {
         jest.spyOn(utilities.Config, 'get').mockReturnValue(retryNumberOfTimes);
-        result = await deleteDocumentById(newDeleteRequest(), mongoClienttMock as any);
+        result = await deleteDocumentByDocumentUuid(newDeleteRequest(), mongoClientMock as any);
       });
 
       it('returns error', async () => {
@@ -63,7 +61,7 @@ describe('given a transaction on a resource', () => {
     describe('given that a number of retries equal to zero has been configured', () => {
       beforeAll(async () => {
         jest.spyOn(utilities.Config, 'get').mockReturnValue(0);
-        result = await deleteDocumentById(newDeleteRequest(), mongoClienttMock as any);
+        result = await deleteDocumentByDocumentUuid(newDeleteRequest(), mongoClientMock as any);
       });
 
       it('should not retry', () => {
@@ -77,7 +75,7 @@ describe('given a transaction on a resource', () => {
 
     describe('given that a number of retries was not configured', () => {
       beforeAll(async () => {
-        result = await deleteDocumentById(newDeleteRequest(), mongoClienttMock as any);
+        result = await deleteDocumentByDocumentUuid(newDeleteRequest(), mongoClientMock as any);
       });
 
       it('should not retry', () => {

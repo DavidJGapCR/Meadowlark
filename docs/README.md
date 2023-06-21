@@ -6,7 +6,9 @@ deployment.
 
 ## Required Toolkit
 
-* NodeJs 16
+* NodeJs 16.
+  * The project will fail with Node 18+.
+  * It is recommended to use [NVM](https://github.com/nvm-sh/nvm) or [NVM-Windows](https://github.com/coreybutler/nvm-windows) to manage this installation of Node 16.
 * Docker Desktop or equivalent
 * Visual Studio Code (recommended)
 
@@ -15,8 +17,7 @@ deployment.
 Meadowlark-js is structured as a monorepo managed by Yarn and Lerna. There are three
 directories that contain npm packages:
 
-* `services`: The Meadowlark custom frontend runners, e.g. AWS API Gateway + Lambda,
-   Ngnix + Fastify
+* `services`: The Meadowlark custom frontend runner, e.g. Fastify
 * `backends`: The Meadowlark custom backend plugins providing primary data storage and
   reference validation e.g. MongoDB, PostgreSQL
 * `packages`: The Meadowlark packages providing core functionality and libraries

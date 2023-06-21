@@ -11,8 +11,11 @@ import { getDocumentCollection } from './Db';
 
 const moduleName: string = 'mongodb.repository.get';
 
-export async function getDocumentById({ documentUuid, traceId }: GetRequest, client: MongoClient): Promise<GetResult> {
-  Logger.debug(`${moduleName}.getDocumentById ${documentUuid}`, traceId);
+export async function getDocumentByDocumentUuid(
+  { documentUuid, traceId }: GetRequest,
+  client: MongoClient,
+): Promise<GetResult> {
+  Logger.debug(`${moduleName}.getDocumentByDocumentUuid ${documentUuid}`, traceId);
 
   const mongoCollection: Collection<MeadowlarkDocument> = getDocumentCollection(client);
 
@@ -20,7 +23,13 @@ export async function getDocumentById({ documentUuid, traceId }: GetRequest, cli
     const result: WithId<MeadowlarkDocument> | null = await mongoCollection.findOne({ documentUuid });
     if (result === null) return { response: 'GET_FAILURE_NOT_EXISTS', document: {} };
     // eslint-disable-next-line no-underscore-dangle
-    return { response: 'GET_SUCCESS', document: { id: documentUuid, ...result.edfiDoc } };
+    const documentLastModifiedDate: string | null = result.lastModifiedAt
+      ? new Date(result.lastModifiedAt).toISOString()
+      : null;
+    return {
+      response: 'GET_SUCCESS',
+      document: { id: documentUuid, ...result.edfiDoc, _lastModifiedDate: documentLastModifiedDate },
+    };
   } catch (e) {
     Logger.error(`${moduleName}.getDocumentById exception`, traceId, e);
     return { response: 'UNKNOWN_FAILURE', document: {} };
