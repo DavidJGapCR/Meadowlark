@@ -42,7 +42,7 @@ export async function configure(initialize = true) {
   } else {
     console.info('-- Setting up containers --');
     // Starting Mongo container since it's required for Authentication
-    await Promise.all([MongoContainer.setup(network), ApiContainer.setup(network), OpenSearchContainer.setup(network)]);
+    await Promise.all([MongoContainer.setup(network), ApiContainer.setup(network)]);
 
     if (process.env.DOCUMENT_STORE_PLUGIN === '@edfi/meadowlark-postgresql-backend') {
       console.info('-- Setting up postgres --');
@@ -52,6 +52,9 @@ export async function configure(initialize = true) {
     if (process.env.QUERY_HANDLER_PLUGIN === '@edfi/meadowlark-elasticsearch-backend') {
       console.info('-- Setting up elasticsearch --');
       await ElasticSearchContainer.setup(network);
+    } else {
+      console.info('-- Setting up opensearch --');
+      await OpenSearchContainer.setup(network);
     }
   }
 
