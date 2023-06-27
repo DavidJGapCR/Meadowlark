@@ -10,11 +10,11 @@ let startedContainer: StartedTestContainer;
 
 export async function setup(network: StartedNetwork) {
   try {
-    const elasticSearchPort = parseInt(process.env.ELASTICSEARCH_PORT ?? '8200', 10);
+    const elasticSearchPort = parseInt(process.env.ELASTICSEARCH_PORT ?? '9200', 10);
     const container = new GenericContainer(
       'docker.elastic.co/elasticsearch/elasticsearch:8.8.0@sha256:9aaa38551b4d9e655c54d9dc6a1dad24ee568c41952dc8cf1d4808513cfb5f65',
     )
-      .withName('elasticsearch-test')
+      .withName('elasticsearch-node-test')
       .withNetwork(network)
       .withReuse()
       .withExposedPorts({
@@ -26,7 +26,7 @@ export async function setup(network: StartedNetwork) {
         'cluster.name': 'elasticsearch-node1',
         'discovery.type': 'single-node',
         'xpack.security.enabled': 'false',
-        'http.port': `${elasticSearchPort}`,
+        ES_JAVA_OPTS: '-Xmx500m', // Limiting memory
       })
       .withStartupTimeout(120_000);
 
